@@ -58,7 +58,7 @@ Use [`references/refactoring-playbooks.md`](references/refactoring-playbooks.md)
 - Governance: central `.github` or platform repo, CODEOWNERS, rulesets on `.github/workflows/**`, allowed-actions policy, required workflows when available, and a versioning stance.
 - Event model: `pull_request`, `pull_request_target`, `merge_group`, `workflow_run`, `repository_dispatch`, and `workflow_dispatch` are trust-boundary choices, not just trigger syntax. Use the toolkit docs map for live event docs: [`../actions-workflow-toolkit/references/docs-map.md`](../actions-workflow-toolkit/references/docs-map.md).
 - CI/CD separation: build once, deploy many; promote artifacts; gate environments; scope OIDC by environment.
-- Scale limits: fetch live limits through the toolkit docs map. The reusable workflow nesting fact worth stating is **10 levels total**: top-level caller plus up to 9 nested workflows. Older docs said 4. See [`docs-map.md`](../actions-workflow-toolkit/references/docs-map.md).
+- Scale limits: fetch live limits through the toolkit docs map. The reusable workflow nesting fact worth stating is **10 levels total**: top-level caller plus up to 9 nested workflows. Older docs said 4. The current docs also cap one caller workflow file at **50 unique reusable workflows**, including nested calls. See [reuse workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) and [reusing workflow configurations](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
 
 ## Output format
 

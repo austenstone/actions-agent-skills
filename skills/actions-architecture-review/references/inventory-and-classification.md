@@ -23,12 +23,15 @@ done
 Pull high-signal fields into a table:
 
 ```bash
-yq -r '
-  [. as $w | path | join("."),
-   (.on // "" | tostring),
-   (.permissions // "" | tostring),
-   (.jobs // {} | keys | join(","))] | @tsv
-' .github/workflows/*.{yml,yaml}
+find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print | sort |
+while read -r f; do
+  f="$f" yq -r '
+    [strenv(f),
+     ((.on // "" | tostring) | split("\n") | join(" ")),
+     ((.permissions // "" | tostring) | split("\n") | join(" ")),
+     (.jobs // {} | keys | join(","))] | @tsv
+  ' "$f"
+done
 ```
 
 ## Org inventory, clone-free
@@ -36,9 +39,11 @@ yq -r '
 Fast path through code search:
 
 ```bash
-gh api --paginate \
-  'search/code?q=org:ORG+path:.github/workflows+extension:yml' \
-  --jq '.items[] | [.repository.full_name, .path, .html_url] | @tsv'
+for ext in yml yaml; do
+  gh api --paginate \
+    "search/code?q=org:ORG+path:.github/workflows+extension:$ext" \
+    --jq '.items[] | [.repository.full_name, .path, .html_url] | @tsv'
+done
 ```
 
 Be honest about the search API: it is capped, can miss generated or uncommon extensions, and is not a complete estate inventory for large orgs. Use it to start, not to prove absence.
@@ -49,9 +54,11 @@ Fallback that lists repos, then fetches workflow directory contents:
 gh repo list ORG --limit 1000 --json nameWithOwner,isArchived \
   --jq '.[] | select(.isArchived == false) | .nameWithOwner' |
 while read -r repo; do
-  gh api "repos/$repo/contents/.github/workflows" \
-    --jq ".[]? | select(.name | test(\\"\\.(ya?ml)$\\")) | [\"$repo\", .name, .download_url] | @tsv" \
-    2>/dev/null || true
+  contents=$(gh api "repos/$repo/contents/.github/workflows" 2>/dev/null) || continue
+  jq -r --arg repo "$repo" '
+    .[]? | select(.name | test("\\.(ya?ml)$")) |
+    [$repo, .name, .download_url] | @tsv
+  ' <<<"$contents"
 done
 ```
 

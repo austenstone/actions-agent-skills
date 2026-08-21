@@ -16,8 +16,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -35,8 +35,8 @@ jobs:
   test:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -48,7 +48,7 @@ Rollback trigger: native dependencies, Docker images, or toolchains do not publi
 
 ## 2. Package-manager cache, not `node_modules`
 
-Cache behavior, branch scope, and eviction rules are in [`docs-map.md#performance-and-cost`](../../actions-workflow-toolkit/references/docs-map.md#performance-and-cost). The practical rule: cache the package manager's content-addressed store, then install cleanly. If feature branches miss cache while the default branch hits, check branch scope before rewriting keys.
+Cache behavior, branch scope, and eviction rules are in [`docs-map.md#performance-and-cost`](../../actions-workflow-toolkit/references/docs-map.md#performance-and-cost). The practical rule: cache the package manager's content-addressed store, then install cleanly. The cache search is branch-scoped: current branch first, then default branch fallback; pull requests can also read the base branch, but not sibling branches, and PR-created caches live under the merge ref. If feature branches miss cache while the default branch hits, check scope before rewriting keys.
 
 Before:
 
@@ -60,8 +60,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
@@ -79,8 +79,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -99,12 +99,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
       - run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ env.STORE_PATH }}
           key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -131,7 +131,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm test
 ```
 
@@ -151,7 +151,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm test
 ```
 
@@ -174,7 +174,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm test
 ```
 
@@ -215,7 +215,7 @@ jobs:
           - web
           - docs
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm --workspace ${{ matrix.package }} test
 ```
 
@@ -231,7 +231,7 @@ jobs:
     outputs:
       matrix: ${{ steps.changed.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: changed
         run: echo 'matrix={"package":["api","web"]}' >> "$GITHUB_OUTPUT"
   build:
@@ -242,7 +242,7 @@ jobs:
       max-parallel: 4
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm --workspace ${{ matrix.package }} test
 ```
 
@@ -262,13 +262,13 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm ci
       - run: npm run lint
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm ci
       - run: npm run typecheck
 ```
@@ -283,8 +283,8 @@ jobs:
   static-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -307,7 +307,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm --prefix docs ci
       - run: npm --prefix docs test
 ```
@@ -322,7 +322,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             docs
@@ -334,7 +334,7 @@ jobs:
 
 ## 8. Docker build cache
 
-Docker cache details live in Docker action docs; GitHub cache limits are linked from [`docs-map.md#performance-and-cost`](../../actions-workflow-toolkit/references/docs-map.md#performance-and-cost) and [`docs-map.md#limits`](../../actions-workflow-toolkit/references/docs-map.md#limits). Use a stable `scope` so unrelated images do not evict each other.
+Docker cache details live in Docker action docs; GitHub cache limits are linked from [`docs-map.md#performance-and-cost`](../../actions-workflow-toolkit/references/docs-map.md#performance-and-cost) and [`docs-map.md#limits`](../../actions-workflow-toolkit/references/docs-map.md#limits). Use a stable image-specific `scope` so unrelated images do not evict each other. Do not include the branch name unless you intentionally want every branch to have a separate BuildKit cache.
 
 Before:
 
@@ -346,9 +346,9 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -364,14 +364,14 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: false
-          cache-from: type=gha,scope=${{ github.workflow }}-${{ github.ref_name }}
-          cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ github.ref_name }}
+          cache-from: type=gha,scope=${{ github.workflow }}-app
+          cache-to: type=gha,mode=max,scope=${{ github.workflow }}-app
 ```
 
 If GitHub cache pressure is the bottleneck, use a registry cache instead of fighting repository cache eviction.

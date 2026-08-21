@@ -13,7 +13,7 @@ All URLs verified live. If one 404s, start from [`/en/actions/reference`](https:
 | Is this `${{ }}` valid, what functions exist | [`/reference/workflows-and-actions/expressions`](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions) |
 | What properties exist on `github.`, `needs.`, `matrix.` | [`/reference/workflows-and-actions/contexts`](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) |
 | `action.yml` schema, composite action `runs:` | [`/reference/workflows-and-actions/metadata-syntax`](https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax) |
-| `workflow_call` inputs/outputs/secrets, nesting rules | [`/reference/workflows-and-actions/reusing-workflow-configurations`](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations) |
+| `workflow_call` inputs/outputs/secrets, nesting rules | [`/how-tos/reuse-automations/reuse-workflows`](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) |
 | Variables, `GITHUB_ENV`, `GITHUB_OUTPUT` | [`/reference/workflows-and-actions/variables`](https://docs.github.com/en/actions/reference/workflows-and-actions/variables) |
 
 ## Security
@@ -52,10 +52,10 @@ All URLs verified live. If one 404s, start from [`/en/actions/reference`](https:
 
 Fetch this page. Do not quote numbers from memory — they move.
 
-Two that are commonly gotten wrong, verified at time of writing:
+Common traps. Fetch the linked page before quoting the number:
 
 - **Reusable workflow nesting: 10 levels total** — the top-level caller plus up to 9 nested. Older documentation said 4. ([source](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows))
-- **Matrix: 256 jobs per run.** Hard ceiling, cannot be raised.
+- **Matrix expansion ceiling** lives on the [limits page](https://docs.github.com/en/actions/reference/limits). Do not quote the old number from memory.
 
 ## Measurement and troubleshooting
 
@@ -85,9 +85,9 @@ Two that are commonly gotten wrong, verified at time of writing:
 
 These are behaviors that surprise people, verified against the pages above. Confirm against live docs before asserting them to a user.
 
-- **`ubuntu-latest` is not one machine.** Public repos get 4 vCPU / 16 GB; private repos get 2 vCPU / 8 GB for the same label. A frequent "why is CI slower in our private repo" answer.
-- **Larger runners never consume included minutes.** They bill at the per-minute rate even on paid plans. Changes the sizing math entirely.
-- **ARM64 is standard-tier now** — `ubuntu-24.04-arm`, `ubuntu-22.04-arm`, `windows-11-arm`. Cheaper per minute than x64.
-- **`actions/checkout` v7+ defaults to the base branch** on `pull_request_target`, with `allow-unsafe-pr-checkout` as the opt-out. The classic footgun is safer by default; grep for the opt-out instead.
+- **`ubuntu-latest` is not one machine.** Public and private repos can resolve to different specs for the same label. Check [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) before explaining a runtime delta.
+- **Larger runners never consume included minutes.** They bill at the published per-minute rate even on paid plans. Check [larger runners](https://docs.github.com/en/actions/reference/runners/larger-runners) and the [rate card](https://docs.github.com/en/billing/reference/actions-runner-pricing) before doing sizing math.
+- **ARM64 labels and rates move.** Check [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) for current labels and the [rate card](https://docs.github.com/en/billing/reference/actions-runner-pricing) for current pricing.
+- **`actions/checkout` has an `allow-unsafe-pr-checkout` input.** Verify the `action.yml` for the tag in use; if it exists, grep for the opt-out instead of assuming the classic `pull_request_target` checkout footgun.
 - **Cache is branch-scoped.** A feature branch cannot read a sibling branch's cache — only its own and the default branch's. Explains "why does my cache never hit."
 - **Reusable workflows bill the caller,** not the repo hosting the workflow.

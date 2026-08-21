@@ -43,7 +43,7 @@ Recommended levers:
 | Matrix continues after a decisive failure | Use `strategy.fail-fast` when later legs do not add diagnostic value |
 | PR authors push many revisions | Add `concurrency.cancel-in-progress` scoped to PR events |
 
-Savings estimate is reruns avoided × full failed-run wall-clock × live rate card. Do not use public-repo `billable.total_ms`; toolkit explains why.
+Savings estimate is reruns avoided × failed job durations by runner SKU × live rate card. Apply the pricing page's job-duration rounding rule. Do not use deprecated timing data or public-repo billable fields; toolkit explains why.
 
 ## 3. Trigger waste branch
 
@@ -83,15 +83,15 @@ Use `/jobs` step timings from the toolkit to find the critical path. Then map th
 Runner sizing is a measurement experiment, not a vibe.
 
 ```text
-current_cost = current_minutes × current_rate
-candidate_cost = candidate_minutes × candidate_rate
+current_cost = sum(current_rounded_job_minutes_by_sku × current_rate_by_sku)
+candidate_cost = sum(candidate_rounded_job_minutes_by_sku × candidate_rate_by_sku)
 savings = current_cost - candidate_cost
 ```
 
-Use the live pricing page referenced in [`docs-map.md#performance-and-cost`](../../actions-workflow-toolkit/references/docs-map.md#performance-and-cost). Larger runners have distinct billing behavior from included minutes; cite the live docs instead of copying the rule here.
+Use the live pricing page referenced in [`docs-map.md#performance-and-cost`](../../actions-workflow-toolkit/references/docs-map.md#performance-and-cost). Larger runners have distinct billing behavior from included minutes; cite the live docs instead of copying the rule here. Workflow wall-clock is a latency metric, not a cost metric, when jobs run in parallel.
 
 Decision rule:
 
-- If wall-clock improves less than the rate multiplier, cost rises.
-- If wall-clock improves more than the rate multiplier, cost falls.
+- If billable job-minute reduction is less than the rate multiplier, cost rises.
+- If billable job-minute reduction is more than the rate multiplier, cost falls.
 - If latency matters more than cost, say that explicitly and do not sell it as savings.

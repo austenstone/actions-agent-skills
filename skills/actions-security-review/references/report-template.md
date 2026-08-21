@@ -25,7 +25,7 @@ Rules:
 
 ## Layer 2 — remediation evidence
 
-```md
+````md
 ### 1. Fork PR code can run with base-repo write permissions
 
 - Location: `.github/workflows/release.yml:23`
@@ -46,7 +46,7 @@ Rules:
 ```
 
 Why: this job checks out PR-controlled code and executes it with base-repo privileges. Move tests to `pull_request`; keep only bounded metadata writes on `pull_request_target` if needed.
-```
+````
 
 ## False-positive notes
 

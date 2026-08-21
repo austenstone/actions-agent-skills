@@ -17,6 +17,8 @@ Untrusted surface to look for:
 Bad:
 
 ```yaml
+permissions: {}
+
 jobs:
   comment:
     runs-on: ubuntu-latest
@@ -30,6 +32,8 @@ jobs:
 Good:
 
 ```yaml
+permissions: {}
+
 jobs:
   comment:
     runs-on: ubuntu-latest
@@ -45,6 +49,8 @@ jobs:
 Better when the value is only used by an action input:
 
 ```yaml
+permissions: {}
+
 jobs:
   label:
     runs-on: ubuntu-latest
@@ -58,7 +64,7 @@ jobs:
 
 ## GITHUB_ENV and GITHUB_OUTPUT injection
 
-Cite the GitHub variables/environment-files page via [`docs-map.md`](../../actions-workflow-toolkit/references/docs-map.md) and cite `github-env` when zizmor flags it. Do not let untrusted input choose an environment/output name. Avoid writing untrusted multiline content into environment files unless it is framed as data and consumed as data.
+Cite the GitHub variables/environment-files page via [`docs-map.md`](../../actions-workflow-toolkit/references/docs-map.md). Cite `github-env` for `GITHUB_ENV` and `GITHUB_PATH` findings. `GITHUB_OUTPUT` misuse may only show up as `template-injection` or manual review, so do not imply zizmor proves every output write safe. Do not let untrusted input choose an environment/output name. Avoid writing untrusted multiline content into environment files unless it is framed as data and consumed as data.
 
 Bad:
 
@@ -100,16 +106,23 @@ steps:
 
 Default-deny at workflow scope, then grant only what each job uses. Cite the GITHUB_TOKEN page through [`docs-map.md`](../../actions-workflow-toolkit/references/docs-map.md).
 
-Bad:
+Bad. Treat `permissions: write-all` as the same smell, even if a scanner does not call it out.
 
 ```yaml
-permissions: write-all
+permissions:
+  contents: write
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@<sha-from-zizmor-fix-title> # v7
+        with:
+          persist-credentials: false
       - run: npm test
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm pack
 ```
 
 Good:
@@ -123,8 +136,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@<sha-from-zizmor-fix-title> # v3
+      - uses: actions/checkout@<sha-from-zizmor-fix-title> # v7
+        with:
+          persist-credentials: false
       - run: npm test
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm pack
 ```
 
 ## Unpinned actions
@@ -135,7 +154,7 @@ Bad:
 
 ```yaml
 steps:
-  - uses: docker/login-action@v3
+  - uses: docker/login-action@v4
 ```
 
 Good shape:
@@ -171,8 +190,8 @@ Bad:
 
 ```yaml
 steps:
-  - uses: actions/checkout@v3
-  - uses: actions/upload-artifact@v4
+  - uses: actions/checkout@v7
+  - uses: actions/upload-artifact@v7
     with:
       name: workspace
       path: .
@@ -182,7 +201,7 @@ Good when no later step pushes:
 
 ```yaml
 steps:
-  - uses: actions/checkout@<sha-from-zizmor-fix-title> # v3
+  - uses: actions/checkout@<sha-from-zizmor-fix-title> # v7
     with:
       persist-credentials: false
   - uses: actions/upload-artifact@<sha-from-zizmor-fix-title> # v4
@@ -198,18 +217,22 @@ Cite `secrets-inherit` when zizmor flags it and cite reusable workflow docs thro
 Bad:
 
 ```yaml
+permissions: {}
+
 jobs:
   deploy:
-    uses: octo-org/platform/.github/workflows/deploy.yml@main
+    uses: octo-org/platform/.github/workflows/deploy.yml@<sha-from-zizmor-fix-title> # main
     secrets: inherit
 ```
 
 Good:
 
 ```yaml
+permissions: {}
+
 jobs:
   deploy:
-    uses: octo-org/platform/.github/workflows/deploy.yml@main
+    uses: octo-org/platform/.github/workflows/deploy.yml@<sha-from-zizmor-fix-title> # main
     secrets:
       deploy_token: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
 ```

@@ -60,7 +60,7 @@ jobs:
     outputs:
       services: ${{ steps.detect.outputs.services }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: detect
         shell: bash
         run: |
@@ -74,7 +74,7 @@ jobs:
       matrix:
         service: ${{ fromJSON(needs.detect.outputs.services) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: npm test --workspace ${{ matrix.service }}
 
   required-check:
@@ -82,7 +82,10 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - run: test '${{ needs.detect.result }}' = 'success'
+      - run: |
+          test '${{ needs.detect.result }}' = 'success'
+          test '${{ needs.test.result }}' != 'failure'
+          test '${{ needs.test.result }}' != 'cancelled'
 ```
 
 `dorny/paths-filter` is a pragmatic detector when the service map is path-based. Native `paths` filters are fine for skipping entire workflows, but required checks and merge queue can make skipped workflows block merges. Design the stable required check first.

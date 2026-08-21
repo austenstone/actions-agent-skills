@@ -26,18 +26,19 @@ actionlint -ignore 'regex matching messages to drop'
 actionlint -init-config                                   # write a starter actionlint.yaml
 ```
 
-Exit codes: `0` clean · `1` findings · `2` fatal.
+Exit codes: `0` clean · `1` findings · `2` invalid option · `3` fatal.
 
 ### Output shape
 
 ```json
 [{
-  "message": "property \"foo\" is not defined in object type {...}",
-  "filepath": ".github/workflows/ci.yml",
-  "line": 12,
-  "column": 18,
-  "kind": "expression",
-  "snippet": "        run: echo ${{ steps.x.outputs.foo }}\n                       ^~~~~"
+  "message": "invalid CRON format \"0 25 * * *\" in schedule event: end of range (25) above maximum (23): 25",
+  "filepath": "test-corpus/broken.yml",
+  "line": 10,
+  "column": 13,
+  "kind": "events",
+  "snippet": "    - cron: '0 25 * * *' # invalid hour\n            ^~",
+  "end_column": 14
 }]
 ```
 
@@ -47,7 +48,7 @@ Useful `kind` values: `syntax-check`, `expression`, `shellcheck`, `matrix`, `eve
 
 ### What it uniquely catches
 
-Expression **type** checking · undefined `needs`/`steps`/`matrix` references · cyclic job dependencies · shellcheck + pyflakes inside `run:` · cron syntax and frequency · glob patterns · IANA timezones · webhook event and payload validation · action input/output validation (fetches `action.yml`) · reusable workflow I/O contracts.
+Expression **type** checking · undefined `needs`/`steps`/`matrix` references · cyclic job dependencies · shellcheck + pyflakes inside `run:` · cron syntax and frequency · glob patterns · IANA timezones · webhook event and payload validation · local action inputs plus embedded popular-action input checks · reusable workflow I/O contracts.
 
 ---
 
@@ -81,24 +82,44 @@ Noise control:
 ```bash
 zizmor --min-severity medium --min-confidence medium ...
 zizmor --persona regular      # default; auditor = maximum paranoia, pedantic = style too
-zizmor --only template-injection,dangerous-triggers ...
 ```
 
-Exit codes: `0` clean · `1` findings.
+There is no `--only` flag in v1.29.0. Use severity/confidence filters, inline ignores, or config ignores for noise control.
+
+Exit codes: `0` clean · `1` audit error · `2` argument error · `3` no inputs · `11` informational findings · `12` low · `13` medium · `14` high. `--no-exit-codes` and `--format sarif` suppress finding exit codes.
 
 ### Output shape
 
 ```json
 [{
-  "ident": "template-injection",
-  "desc": "code injection via template expansion",
+  "ident": "unpinned-uses",
+  "desc": "unpinned action reference",
   "determinations": { "severity": "High", "confidence": "High", "persona": "Regular" },
-  "url": "https://docs.zizmor.sh/audits/#template-injection",
+  "url": "https://docs.zizmor.sh/audits/#unpinned-uses",
   "locations": [{
-    "symbolic": { "key": {}, "annotation": "this run block", "route": {}, "kind": {}, "feature_kind": {} },
-    "concrete": { "location": { "start_point": { "row": 10, "column": 8 } } }
+    "symbolic": {
+      "key": { "Local": { "verbatim_path": "test-corpus/insecure.yml" } },
+      "annotation": "action is not pinned to a hash (required by blanket policy)",
+      "route": { "route": [{ "Key": "jobs" }, { "Key": "pwn-request" }, { "Key": "steps" }, { "Index": 0 }, { "Key": "uses" }] },
+      "feature_kind": { "Subfeature": { "after": 0, "fragment": { "Raw": "actions/checkout@v7" } } },
+      "kind": "Primary"
+    },
+    "concrete": {
+      "location": {
+        "start_point": { "row": 18, "column": 14 },
+        "end_point": { "row": 18, "column": 33 },
+        "offset_span": { "start": 599, "end": 618 }
+      },
+      "feature": "actions/checkout@v7",
+      "comments": []
+    }
   }],
-  "fixes": [{ "title": "pin actions/checkout@v5 to 08c6903c...", "disposition": "safe", "key": {} }]
+  "ignored": false,
+  "fixes": [{
+    "title": "pin actions/checkout@v7 to 11d5960a326750d5838078e36cf38b85af677262",
+    "key": { "Local": { "verbatim_path": "test-corpus/insecure.yml" } },
+    "disposition": "unsafe"
+  }]
 }]
 ```
 
@@ -120,11 +141,11 @@ Medium	Medium	excessive-permissions	7
 Medium	Low	artipacked	10
 ```
 
-Severity ∈ `Low|Medium|High|Unknown`. Confidence ∈ `Low|Medium|High`. Rank by severity, then confidence. **Anything `High`/`High` is not a judgment call — fix it.**
+Severity ∈ `Informational|Low|Medium|High`. Confidence ∈ `Low|Medium|High`. Rank by severity, then confidence. **Anything `High`/`High` is not a judgment call — fix it.**
 
 ### Fixes
 
-`fixes[].title` often contains a **pre-resolved commit SHA** — `"pin actions/checkout@v5 to 08c6903c..."`. Use that string; never resolve or invent a SHA yourself.
+`fixes[].title` often contains a **pre-resolved commit SHA** — `"pin OWNER/ACTION@TAG to <resolved SHA>"`. Use that string; never resolve or invent a SHA yourself.
 
 `fixes[].disposition`:
 
@@ -173,7 +194,9 @@ Several require network access (`known-vulnerable-actions`, `impostor-commit`, `
 | Unpinned / vulnerable / impostor actions | ❌ | ✅ unique |
 | Cache poisoning, `secrets: inherit` | ❌ | ✅ unique |
 | Auto-fix | ❌ | ✅ |
-| Single binary, JSON, SARIF, offline | ✅ | ✅ |
+| Single binary + JSON output | ✅ | ✅ |
+| SARIF output | ❌ | ✅ |
+| Offline/no-online mode flag | ❌ | ✅ |
 
 Near-zero redundancy. Run both.
 
@@ -196,9 +219,11 @@ gh api repos/OWNER/REPO/contents/.github/workflows --jq '.[].name'   # list with
 gh workflow list --json id,name,path,state
 gh run list --limit 20 --json databaseId,name,conclusion,createdAt,event
 gh api repos/OWNER/REPO/actions/runs/RUN_ID/jobs \
-  --jq '.jobs[] | {job:.name, steps:[.steps[]|{name,started_at,completed_at}]}'
+  --jq '.jobs[] | {job:.name, labels, started_at, completed_at, steps:[.steps[]|{name,started_at,completed_at}]}'
 gh cache list --sort size_in_bytes --order desc --json key,sizeInBytes,lastAccessedAt
 gh api repos/OWNER/REPO/commits/v5 --jq .sha                        # resolve a tag to a SHA
 ```
 
-**Do not use** `/actions/runs/{id}/timing` — deprecated, returns an empty `billable` object.
+**Do not use** `/actions/runs/{id}/timing` for cost math. It is closing down, can return an empty `billable` object or `billable.<OS>.total_ms: 0` on public repos, and the REST docs say the usage is not rounded and does not include the macOS/Windows multiplier.
+
+For cost estimates, use `/jobs`: round each job duration up to the nearest minute, sum by runner label/SKU, then apply the live per-minute rate or OS multiplier from [the rate card](https://docs.github.com/en/billing/reference/actions-runner-pricing). Workflow wall-clock duration is latency, not billing.

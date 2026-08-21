@@ -22,12 +22,12 @@ Start with data, not grep. Static YAML review tells you possible waste; metrics 
 | Signal | Source | What it means | Next move |
 |---|---|---|---|
 | High average queue time | Actions Performance Metrics via toolkit | Capacity or concurrency problem, not workflow inefficiency | Do not refactor YAML first. Check runner availability, org concurrency, `max-parallel`, and superseded-run cancellation. |
-| High average run time | Actions Performance Metrics, then `/jobs` API | Critical path is inside the job | Use step timings to choose cache, checkout, Docker, matrix, or runner-sizing fixes. |
+| High average run time | Actions Performance Metrics, then `/jobs` API | Critical path is inside the job | Use job and step timings to choose cache, checkout, Docker, matrix, or runner-sizing fixes. |
 | High failure rate | Actions Performance Metrics | Reruns are multiplying cost | Fix flake, environment instability, dependency fetch failures, or fail-fast behavior before tuning runtime. |
 | Minutes concentrated in one workflow/repo | Actions Usage Metrics | The expensive target is known | Optimize that workflow first, even if another file looks uglier. |
 | One slow step dominates a run | `/actions/runs/{id}/jobs` through toolkit | Step-level bottleneck | Apply the lever that matches that step. |
 
-Toolkit mechanics and caveats live in [`../actions-workflow-toolkit/SKILL.md#get-real-performance-data`](../actions-workflow-toolkit/SKILL.md#step-3--get-real-performance-data). Do not use deprecated run timing data or public-repo `billable.total_ms` for cost math; use wall-clock and the live rate card referenced by the toolkit.
+Toolkit mechanics and caveats live in [`../actions-workflow-toolkit/SKILL.md#get-real-performance-data`](../actions-workflow-toolkit/SKILL.md#step-3--get-real-performance-data). Do not use deprecated run timing data or public-repo `billable.total_ms` for cost math. Use `/jobs` durations rolled up by runner SKU plus the live rate card for cost, and wall-clock critical path for latency.
 
 ## Phase 2: Diagnose
 
@@ -68,7 +68,7 @@ Detailed branching logic: [`references/decision-tree.md`](references/decision-tr
 3. **Check `ubuntu-latest` visibility behavior.** The same label maps to different hosted-runner capacity for public vs private repos. Do not copy the specs; cite the live runner reference: [`docs-map.md#performance-and-cost`](../actions-workflow-toolkit/references/docs-map.md#performance-and-cost).
 4. **Stop running expensive workflows on irrelevant changes.** Use path filters or dynamic monorepo matrices, but handle required-status-check deadlocks. Trigger docs: [`docs-map.md#syntax-and-semantics`](../actions-workflow-toolkit/references/docs-map.md#syntax-and-semantics).
 5. **Cache package-manager stores, not random build directories.** Prefer `setup-*` built-in cache inputs when they cover the ecosystem; use `actions/cache` for custom paths. Cache behavior citation: [`docs-map.md#performance-and-cost`](../actions-workflow-toolkit/references/docs-map.md#performance-and-cost).
-6. **Right-size runners with arithmetic.** Larger runners can be cheaper only when measured speedup beats the rate multiplier. They have separate billing behavior from included minutes, so cite the current docs before recommending them: [`docs-map.md#performance-and-cost`](../actions-workflow-toolkit/references/docs-map.md#performance-and-cost).
+6. **Right-size runners with arithmetic.** Larger runners can be cheaper only when measured billable-minute reduction beats the rate multiplier. They have separate billing behavior from included minutes, so cite the current docs before recommending them: [`docs-map.md#performance-and-cost`](../actions-workflow-toolkit/references/docs-map.md#performance-and-cost).
 7. **Shape the matrix.** Use `fail-fast`, `max-parallel`, and dynamic `fromJSON` matrices for selective monorepo builds. Matrix docs: [`docs-map.md#performance-and-cost`](../actions-workflow-toolkit/references/docs-map.md#performance-and-cost).
 8. **Fix job graph shape.** Every job has VM, checkout, and dependency overhead. Splitting only wins when branches are long and independent.
 9. **Reduce checkout and Docker tax.** Keep checkout shallow unless history is required, use sparse checkout, scrutinize LFS/submodules, tune `buildx` cache scopes, and switch to registry cache when GitHub cache limits are the bottleneck. Checkout/action and Docker references start from [`docs-map.md`](../actions-workflow-toolkit/references/docs-map.md).
@@ -97,6 +97,6 @@ Evidence: .github/workflows/ci.yml:1 plus Actions Usage Metrics for ci.yml.
 Change: add workflow-level concurrency scoped to event + PR/ref.
 Diff: <exact diff>
 Citation: ../actions-workflow-toolkit/references/docs-map.md#performance-and-cost
-Expected savings: per-run saving × measured runs/day. Frequency missing -> unquantified.
+Expected savings: per-job rounded minute saving × measured runs/day. Frequency missing -> unquantified.
 Scope: repo YAML change.
 ```

@@ -76,12 +76,18 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@<sha-from-zizmor-fix-title> # v4
+        with:
+          name: artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: artifact
       - run: ./artifact/deploy.sh
 ```
 

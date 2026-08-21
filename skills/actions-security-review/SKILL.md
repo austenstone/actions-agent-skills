@@ -13,7 +13,7 @@ Load [`actions-workflow-toolkit`](../actions-workflow-toolkit/SKILL.md) first. U
 2. **Run zizmor remote-slug mode.** Use the toolkit's `OWNER/REPO` mode for the same target when a GitHub slug is available. This catches repo-context-dependent audits and proves the review is not tied to a stale checkout.
 3. **Run actionlint.** Treat it as the expression, schema, and shell correctness oracle; security fixes that break actionlint are regressions.
 4. **Rank findings.** Sort by severity, then confidence, then exploitability from the workflow context. High/high remote-code-execution or credential-exposure findings go first.
-5. **Manually review what tools cannot prove:** org-level allowed-actions policy, rulesets on `.github/workflows/**`, CODEOWNERS ownership, artifact attestations, cloud OIDC trust policy design, and the self-hosted runner operating model.
+5. **Manually review what tools cannot prove:** org-level allowed-actions policy, rulesets on `.github/workflows/**`, CODEOWNERS ownership, artifact attestations, explicit `permissions: write-all`, cloud OIDC trust policy design, and the self-hosted runner operating model.
 6. **Report in two layers.** Layer 1 is screen-share-safe consequence language. Layer 2 is file:line, rule ID, exact diff, and citation URL.
 
 ## Triage table
@@ -30,7 +30,7 @@ Cite each zizmor finding's own `url`. Do not paraphrase the rule documentation; 
 | `artipacked` | Checkout credentials can persist on disk and be swept into uploaded artifacts. | No when disposition is unsafe; `persist-credentials: false` can break later push steps. |
 | `secrets-inherit` | A reusable workflow gets the caller's whole secret set instead of named secrets. | No. Replace with explicit secret mapping. |
 | `self-hosted-runner` | Fork PR code can execute on infrastructure you own; persistent runners can remain compromised across jobs. | No. Requires runner policy, isolation, and trigger changes. |
-| `github-env` | Untrusted writes to environment files can alter later step execution context. | No. Redesign data passing and sanitize names/values. |
+| `github-env` | Untrusted writes to `GITHUB_ENV` or `GITHUB_PATH` can alter later step execution context. | No. Redesign data passing and sanitize names/values. |
 
 ## Review focus
 
@@ -70,6 +70,6 @@ A clean workflow gets a clean report. Do **not** flag:
 - First-party `actions/*` tag pins as the same risk as unknown third-party action tag pins. Still prefer SHA pins, but rank the consequence honestly.
 - `permissions: contents: read` as excessive when checkout is the only repo operation.
 - `persist-credentials: true` when a later audited step intentionally pushes and artifacts cannot include the credential path.
-- `secrets: inherit` inside a private, tightly-owned reusable workflow boundary without first explaining the actual secret exposure path.
+- `secrets: inherit` without first explaining whether the callee needs every caller secret and who can change that callee.
 
 If the tool is clean and the manual checks are clean, say that. Noise trains people to ignore the review.

@@ -59,13 +59,13 @@ Neither tool installed and you cannot install one? Say so explicitly in the repo
 
 ### Reading the output
 
-`actionlint` → array of `{message, filepath, line, column, kind, snippet}`. **Every entry is a real bug.** It is conservatively tuned; treat findings as facts, not candidates.
+`actionlint` → array of `{message, filepath, line, column, end_column, kind, snippet}`. **Every entry is a real bug.** It is conservatively tuned; treat findings as facts, not candidates.
 
-`zizmor` → array of `{ident, desc, determinations:{severity, confidence}, locations[], fixes[], url}`.
+`zizmor` → array of `{ident, desc, determinations:{severity, confidence, persona}, locations[], fixes[], ignored, url}`.
 
 - Rank by `determinations.severity`, then `confidence`.
 - `url` is the rule's own documentation — cite it, don't paraphrase it.
-- `fixes[]` may contain a **pre-resolved SHA** (`"pin actions/checkout@v5 to 08c6903..."`). Use it directly; never look one up yourself and never invent one.
+- `fixes[]` may contain a **pre-resolved SHA** (`"pin OWNER/ACTION@TAG to <resolved SHA>"`). Use it directly; never look one up yourself and never invent one.
 - Each fix carries `disposition: "safe" | "unsafe"`. Only `safe` fixes are candidates for automatic application — and even then, see the safety contract.
 
 Both tools flag template injection with different heuristics. Overlap is confirmation, not noise — report it once.
@@ -78,21 +78,21 @@ Work down this ladder — stop when you have the answer:
 
 1. **[Actions Performance Metrics](https://docs.github.com/en/actions/how-tos/administer/view-metrics)** (org/enterprise dashboard) — avg run time, **avg queue time**, failure rate, sliced by workflow/job/repo/OS/runner. Start here. High queue time is a capacity problem, not a workflow problem — a distinction that changes the entire recommendation.
 2. **[Actions Usage Metrics](https://docs.github.com/en/actions/how-tos/administer/view-metrics)** — minutes by workflow and repo. Finds the expensive thing.
-3. **`/jobs` API** — per-step timing on a specific run, for critical-path analysis:
+3. **`/jobs` API** — per-job timing for billing estimates, plus per-step timing for critical-path analysis:
 
    ```bash
    run_id=$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId')
    gh api repos/OWNER/REPO/actions/runs/$run_id/jobs \
-     --jq '.jobs[] | {job:.name, steps:[.steps[]|{name,started_at,completed_at}]}'
+     --jq '.jobs[] | {job:.name, labels, started_at, completed_at, steps:[.steps[]|{name,started_at,completed_at}]}'
    ```
 
    Timestamps are second-granularity, so sub-second steps show `0`. Fine for finding the slow step; useless for micro-optimization.
 
 4. **[Per-job Usage panel](https://docs.github.com/en/actions/how-tos/monitor-workflows/view-job-execution-time)** — UI spot-check.
 
-**Do not use `/actions/runs/{id}/timing`.** It is deprecated and returns an empty `billable` object.
+**Do not use `/actions/runs/{id}/timing` for cost math.** It is closing down, can return an empty `billable` object or `billable.<OS>.total_ms: 0` on public repos, and the REST docs say the usage is not rounded and does not include the macOS/Windows multiplier.
 
-**Cost math:** `billable.total_ms` is always `0` on public repos, because public repos are free. Compute wall-clock × the published per-minute rate from [the rate card](https://docs.github.com/en/billing/reference/actions-runner-pricing). Fetch the rate — never hardcode it.
+**Cost math:** wall-clock duration is latency, not billing. For each job from `/jobs`, compute `ceil((completed_at - started_at) / 60 seconds)`, group by runner label/SKU, then apply the live per-minute rate or OS multiplier from [the rate card](https://docs.github.com/en/billing/reference/actions-runner-pricing). Fetch rates — never hardcode them.
 
 ## Step 4 — Report
 
