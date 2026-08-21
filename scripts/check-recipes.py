@@ -28,6 +28,83 @@ def code_blocks(text):
             yield n, line
 
 
+def bash_blocks(text):
+    """Yield (start_line, [lines]) for each ```bash fenced block."""
+    lines = text.splitlines()
+    inside = False
+    start = 0
+    buf = []
+    for n, line in enumerate(lines, 1):
+        if FENCE.match(line):
+            if inside:
+                yield start, buf
+                buf = []
+            inside = line.strip().startswith("```bash")
+            start = n + 1
+            continue
+        if inside:
+            buf.append((n, line))
+
+
+def _strip_literals(line):
+    """Remove quoted strings and command substitutions.
+
+    The tool names appear inside echo messages and in output filenames
+    (`actionlint.json`); neither is an invocation.
+    """
+    line = re.sub(r"\$\([^)]*\)", "$X", line)
+    line = re.sub(r"'[^']*'", "''", line)
+    line = re.sub(r'"[^"]*"', '""', line)
+    return line
+
+
+# The tool name in COMMAND position: start of line or after a separator,
+# allowing an `env`/VAR=value prefix.
+INVOCATION = re.compile(
+    r"(?:^|[;|]|\)\s|\}\s)\s*"
+    r"(?:env\s+)?"
+    r"(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*"
+    r"(?:actionlint|zizmor)\b"
+)
+# Anything that means the status is being handled rather than allowed to abort.
+HANDLED = re.compile(r"rc=\$\?|\|\||&&|^\s*(if|!|for|while|case|#)|\\\s*$")
+
+
+def check_mixed_guarding(md, text):
+    """A procedure block must guard EVERY invocation, not just most of them.
+
+    Both tools exit non-zero on findings, so one bare invocation aborts the
+    whole script under `set -euo pipefail` -- before the validity assertions
+    that follow it. A block is treated as a procedure (rather than a catalog
+    of invocation forms) only if it already guards at least one call.
+    """
+    failures = 0
+    for _, block in bash_blocks(text):
+        body = [ln for _, ln in block]
+        if not any("rc=$?" in ln for ln in body):
+            continue  # catalog of forms, not a runnable procedure
+        for lineno, line in block:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if HANDLED.search(stripped):
+                continue
+            if not INVOCATION.search(_strip_literals(stripped)):
+                continue
+            rel = md.relative_to(ROOT)
+            print(f"FAIL  {rel}:{lineno}  unguarded invocation in a guarded block")
+            print(f"      {stripped}")
+            print(
+                "      why: this block guards its other calls, so it is a "
+                "procedure an agent will paste. Findings exit non-zero "
+                "(actionlint 1, zizmor 11-14), so a bare call aborts the "
+                "script under 'set -euo pipefail' before its own assertions "
+                "run. Use '&& rc=0 || rc=$?' here too.\n"
+            )
+            failures += 1
+    return failures
+
+
 CHECKS = [
     (
         re.compile(r"actionlint[^|]*\|\|[^|]*actionlint"),
@@ -68,13 +145,14 @@ def main():
                     print(f"      {line.strip()}")
                     print(f"      why: {why}\n")
                     failures += 1
+        failures += check_mixed_guarding(md, text)
 
     if failures:
         print(f"{failures} bad recipe(s) in documented code blocks")
         return 1
 
     print(f"scanned {scanned} markdown files")
-    print("documented shell recipes pass all 3 regression guards")
+    print("documented shell recipes pass all 4 regression guards")
     return 0
 
 
