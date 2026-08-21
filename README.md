@@ -84,14 +84,17 @@ Full contract: [`actions-workflow-toolkit/SKILL.md`](skills/actions-workflow-too
 ## Development
 
 ```bash
-./test-corpus/verify.sh            # fixtures still produce the documented findings
-./scripts/check-urls.sh            # every cited URL resolves
-./scripts/check-audit-idents.sh    # no invented or stale zizmor rule names
-python3 scripts/check-links.py     # every relative link and anchor resolves
-python3 scripts/check-frontmatter.py  # skill frontmatter parses and has triggers
+./test-corpus/verify.sh              # fixtures still produce the documented findings
+./scripts/check-urls.sh              # every cited URL resolves
+./scripts/check-audit-idents.sh      # no invented or stale zizmor rule names
+./scripts/check-action-refs.sh       # every cited action exists and is the current major
+python3 scripts/check-links.py       # every relative link and anchor resolves
+python3 scripts/check-frontmatter.py # skill frontmatter parses and has triggers
 ```
 
-All four run in CI. The repo also runs `actionlint` and `zizmor` on its own workflows — a security skill whose own CI fails its own review is not worth reading.
+All six run in CI. The repo also runs `actionlint` and `zizmor` on its own workflows — a security skill whose own CI fails its own review is not worth reading.
+
+Each guard exists because that exact defect already shipped here. Rule names were invented, frontmatter was written that silently failed to parse, and the four skills independently drifted to four different major versions of `actions/checkout`. Prose review caught none of them. Anything a reviewer cannot reliably verify by reading gets a script instead.
 
 ## License
 
