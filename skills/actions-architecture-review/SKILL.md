@@ -1,6 +1,6 @@
 ---
 name: actions-architecture-review
-description: review our CI architecture, should this be a reusable workflow or composite action, our workflows are duplicated across repos, monorepo CI design, standardize CI across teams, workflow governance, we migrated from Jenkins and it's a mess, CI/CD platform design. Reviews the shape of an entire GitHub Actions estate across repos or a monorepo: duplicated jobs, migration debt, missing governance, event-model mistakes, and platform refactors no per-file linter can see. Load with actions-workflow-toolkit for workflow discovery, tool validation, safety rules, and live GitHub Actions documentation links.
+description: "Reviews the shape of an entire GitHub Actions estate across many repos or a monorepo, finding duplicated jobs, migration debt, missing governance, event-model mistakes, and platform refactors that no per-file linter can see. Use when: review our CI architecture, should this be a reusable workflow or composite action, our workflows are duplicated across repos, monorepo CI design, standardize CI across teams, workflow governance, we migrated from Jenkins and it is a mess, or CI/CD platform design. Load alongside actions-workflow-toolkit for workflow discovery, tool validation, safety rules, and live GitHub Actions documentation links."
 ---
 
 # Actions Architecture Review

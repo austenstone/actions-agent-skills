@@ -1,6 +1,6 @@
 ---
 name: actions-optimization
-description: CI is slow, reduce Actions minutes, cut CI costs, why is my cache not hitting, speed up my workflow, runner sizing, workflow takes too long, reduce GitHub Actions bill, diagnose queue time, fix flaky reruns, optimize matrix builds, tune Docker layer caching, and right-size GitHub-hosted runners. This optimization playbook measures first, separates queue time from run time from failure-rate-driven reruns, then chooses the highest-ROI GitHub Actions lever with exact YAML diffs and live citations. Load it with actions-workflow-toolkit for tooling, safety contract, performance-data mechanics, API commands, JSON shapes, and documentation URL lookup.
+description: "Makes GitHub Actions workflows faster and cheaper by measuring before changing anything, separating queue time from run time from failure-driven reruns, then applying the highest-ROI lever as an exact YAML diff with live citations. Use when: CI is slow, reduce Actions minutes, cut CI costs, why is my cache not hitting, speed up my workflow, runner sizing, workflow takes too long, reduce GitHub Actions bill, diagnose queue time, fix flaky reruns, optimize matrix builds, tune Docker layer caching, or right-size GitHub-hosted runners. Load alongside actions-workflow-toolkit for tooling, safety contract, performance-data mechanics, API commands, JSON shapes, and documentation URL lookup."
 ---
 
 # Actions Optimization

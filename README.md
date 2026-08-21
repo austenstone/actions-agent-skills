@@ -88,6 +88,7 @@ Full contract: [`actions-workflow-toolkit/SKILL.md`](skills/actions-workflow-too
 ./scripts/check-urls.sh            # every cited URL resolves
 ./scripts/check-audit-idents.sh    # no invented or stale zizmor rule names
 python3 scripts/check-links.py     # every relative link and anchor resolves
+python3 scripts/check-frontmatter.py  # skill frontmatter parses and has triggers
 ```
 
 All four run in CI. The repo also runs `actionlint` and `zizmor` on its own workflows — a security skill whose own CI fails its own review is not worth reading.

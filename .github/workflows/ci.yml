@@ -62,6 +62,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Skill frontmatter is valid and loadable
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          python3 scripts/check-frontmatter.py
+
       - name: Relative links and anchors resolve
         run: python3 scripts/check-links.py
 
