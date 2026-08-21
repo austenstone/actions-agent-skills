@@ -22,8 +22,8 @@ done
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# Pull the wrapper verbatim out of the shipped docs. Drop the remote-scan line:
-# it needs a token and is covered separately.
+# Pull the wrapper verbatim out of the shipped docs. Drop the remote-scan
+# stanza: it needs a token and a real slug, and is covered separately.
 python3 - "$REPO/$SKILL" > "$work/wrapper.sh" <<'PY'
 import re, sys, pathlib
 text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -31,10 +31,21 @@ blocks = re.findall(r"```bash\n(.*?)```", text, re.S)
 match = [b for b in blocks if "actionlint" in b and "zizmor" in b]
 if not match:
     sys.exit("could not find the tool wrapper block in the skill")
+
+# The remote stanza runs from its comment header to the end of the block.
+kept, skipping = [], False
 for line in match[0].splitlines():
-    if "OWNER/REPO" in line:
-        continue
-    print(line)
+    if re.match(r"\s*#.*remote, no clone", line):
+        skipping = True
+    if not skipping:
+        kept.append(line)
+
+body = "\n".join(kept)
+if "OWNER/REPO" in body or "remote.json" in body:
+    sys.exit("remote stanza leaked into the extracted wrapper; fix the filter")
+if "actionlint" not in body or "zizmor" not in body:
+    sys.exit("filter removed too much; both tools must remain")
+print(body)
 PY
 
 mkdir -p "$work/repo/.github/workflows"

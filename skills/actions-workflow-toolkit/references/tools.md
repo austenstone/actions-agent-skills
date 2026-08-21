@@ -98,8 +98,10 @@ zizmor --format json .github/workflows/ci.yml     # single file
 GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO        # remote, NO CLONE
 GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO@v1.2.0 # pinned ref
 zizmor --format sarif .github/workflows/          # for code scanning upload
-zizmor --offline ...                              # skip all network-dependent audits
+zizmor --offline ...                              # local only — see recovery table below
 ```
+
+Those are **invocation forms, not runnable procedures.** Do not paste them into a script bare: findings exit `11`–`14`, which aborts any `set -e` shell. The wrapper to actually run is [below](#the-one-jq-recipe-worth-memorizing).
 
 **Remote mode is the differentiator.** You can audit any repository you can read without cloning it — useful for reviewing a repo you don't have checked out, or auditing a dependency.
 

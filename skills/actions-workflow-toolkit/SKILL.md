@@ -66,7 +66,10 @@ case "$rc" in 0|1[1-4]) ;; *) cat zizmor.err >&2; exit 2 ;; esac   # 11–14 = f
 jq -e 'type == "array"' zizmor.json >/dev/null
 
 # security — remote, no clone. NOT the same file set as the local scan.
-GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO
+# Same guard: findings exit non-zero here too.
+GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO >remote.json 2>remote.err && rc=0 || rc=$?
+case "$rc" in 0|1[1-4]) ;; *) cat remote.err >&2; exit 2 ;; esac
+jq -e 'type == "array"' remote.json >/dev/null
 ```
 
 **Both tools exit non-zero when they find something, and that is a *successful* run.** `actionlint` exits `1`; `zizmor` exits `11`–`14` by severity. Two consequences, both of which silently destroy results rather than erroring:
