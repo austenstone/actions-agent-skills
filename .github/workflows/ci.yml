@@ -31,14 +31,18 @@ jobs:
         with:
           persist-credentials: false
 
+      # Fetch the release asset directly rather than through upstream's
+      # installer script, so the download gets explicit retries. A bare curl to
+      # a release URL fails the whole job on any transient reset, which it did.
       - name: Install actionlint
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -sSfL \
-            "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash" \
-            -o /tmp/download-actionlint.bash
-          bash /tmp/download-actionlint.bash "${ACTIONLINT_VERSION}" "$HOME/.local/bin"
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 3 \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C "$HOME/.local/bin" actionlint
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/actionlint" -version
 
       - name: Install zizmor
         run: pipx install "zizmor==${ZIZMOR_VERSION}"
@@ -94,14 +98,18 @@ jobs:
         with:
           persist-credentials: false
 
+      # Fetch the release asset directly rather than through upstream's
+      # installer script, so the download gets explicit retries. A bare curl to
+      # a release URL fails the whole job on any transient reset, which it did.
       - name: Install actionlint
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -sSfL \
-            "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash" \
-            -o /tmp/download-actionlint.bash
-          bash /tmp/download-actionlint.bash "${ACTIONLINT_VERSION}" "$HOME/.local/bin"
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 3 \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C "$HOME/.local/bin" actionlint
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/actionlint" -version
 
       - name: Install zizmor
         run: pipx install "zizmor==${ZIZMOR_VERSION}"
