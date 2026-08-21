@@ -32,13 +32,16 @@ Exit codes: `0` clean · `1` findings · `2` invalid option · `3` fatal.
 **Always run it under a timeout, and fall back on hang.** actionlint shells out to `shellcheck` once per `run:` block. On large workflow sets this can stall for minutes with no output — measured to exceed 120s on 7 of 10 real public repos (`cli/cli`, `vercel/next.js`, `home-assistant/core`, `rust-lang/rust`, `denoland/deno`, `pytorch/pytorch`, `pandas-dev/pandas`). A hang is indistinguishable from work in progress, so an agent that does not bound it either blocks forever or quietly skips correctness review.
 
 ```bash
-timeout 120 actionlint -format '{{json .}}' > actionlint.json || {
+TIMEOUT=$(command -v timeout || command -v gtimeout || true)
+[ -n "$TIMEOUT" ] || echo 'no timeout binary (brew install coreutils) — running unbounded' >&2
+
+${TIMEOUT:+$TIMEOUT 120} actionlint -format '{{json .}}' > actionlint.json || {
   echo 'actionlint timed out or failed; retrying without shellcheck' >&2
   actionlint -shellcheck= -format '{{json .}}' > actionlint.json
 }
 ```
 
-`timeout` is GNU coreutils; on macOS use `gtimeout` from `brew install coreutils`.
+`timeout` ships with GNU coreutils and is **absent from stock macOS**. Resolve it into a variable first, as above. A bare `timeout 120 actionlint ... || actionlint -shellcheck= ...` is a trap: without coreutils the shell returns `127` instantly, the fallback fires on *every* run, and shell linting is silently skipped forever while the command still appears to succeed.
 
 If you fall back, **say so in the report**: shell linting inside `run:` blocks was skipped. The fallback returns instantly on every repo measured, and still catches all YAML, expression, and workflow-syntax errors.
 

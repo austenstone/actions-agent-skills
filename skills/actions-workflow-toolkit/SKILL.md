@@ -47,8 +47,14 @@ Two tools, different planes, both worth running:
 ```bash
 # correctness — local only. Bare form auto-discovers .github/workflows/ and
 # covers .yml AND .yaml. Bound it: shellcheck can hang on large workflow sets.
-timeout 120 actionlint -format '{{json .}}' > actionlint.json ||
+# `timeout` is GNU coreutils — absent on stock macOS, so resolve it first.
+TIMEOUT=$(command -v timeout || command -v gtimeout || true)
+[ -n "$TIMEOUT" ] || echo 'no timeout binary (brew install coreutils) — running unbounded' >&2
+
+${TIMEOUT:+$TIMEOUT 120} actionlint -format '{{json .}}' > actionlint.json || {
+  echo 'actionlint timed out — retrying without shellcheck; shell linting SKIPPED' >&2
   actionlint -shellcheck= -format '{{json .}}' > actionlint.json
+}
 
 # security — local. Never pipe straight to jq; a hard-failed run writes
 # nothing to stdout and reads as "clean". Capture, then assert.
@@ -58,6 +64,8 @@ jq -e 'type == "array"' zizmor.json >/dev/null || cat zizmor.err >&2
 # security — remote, no clone. NOT the same file set as the local scan.
 GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO
 ```
+
+Do **not** write a bare `timeout 120 actionlint ... || actionlint -shellcheck= ...`. On any machine without coreutils, `timeout` exits 127 immediately, the fallback fires on every run, and shell linting is silently dropped forever with no visible error.
 
 Full wrappers, hard-fail recovery, and the timeout rationale: [`references/tools.md`](references/tools.md).
 
