@@ -70,19 +70,20 @@ INVOCATION = re.compile(
 HANDLED = re.compile(r"rc=\$\?|\|\||&&|^\s*(if|!|for|while|case|#)|\\\s*$")
 
 
-def check_mixed_guarding(md, text):
-    """A procedure block must guard EVERY invocation, not just most of them.
+def check_unguarded(md, text):
+    """No bare tool invocation in any fenced block, anywhere.
 
-    Both tools exit non-zero on findings, so one bare invocation aborts the
-    whole script under `set -euo pipefail` -- before the validity assertions
-    that follow it. A block is treated as a procedure (rather than a catalog
-    of invocation forms) only if it already guards at least one call.
+    Both tools exit non-zero on findings, so a bare invocation aborts the
+    script under `set -euo pipefail` -- before whatever validation follows
+    it. That applies just as much to a one-line "quick example" as to a
+    procedure, because the example is what gets copied. Flag catalogs belong
+    in tables, where they cannot be pasted as a script.
+
+    The whole repo satisfies this, so the rule is absolute rather than
+    heuristic: any hit is a regression.
     """
     failures = 0
     for _, block in bash_blocks(text):
-        body = [ln for _, ln in block]
-        if not any("rc=$?" in ln for ln in body):
-            continue  # catalog of forms, not a runnable procedure
         for lineno, line in block:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
@@ -92,14 +93,15 @@ def check_mixed_guarding(md, text):
             if not INVOCATION.search(_strip_literals(stripped)):
                 continue
             rel = md.relative_to(ROOT)
-            print(f"FAIL  {rel}:{lineno}  unguarded invocation in a guarded block")
+            print(f"FAIL  {rel}:{lineno}  unguarded invocation in a code block")
             print(f"      {stripped}")
             print(
-                "      why: this block guards its other calls, so it is a "
-                "procedure an agent will paste. Findings exit non-zero "
-                "(actionlint 1, zizmor 11-14), so a bare call aborts the "
-                "script under 'set -euo pipefail' before its own assertions "
-                "run. Use '&& rc=0 || rc=$?' here too.\n"
+                "      why: findings exit non-zero (actionlint 1, zizmor "
+                "11-14), so this aborts the script under 'set -euo pipefail' "
+                "before any assertion that follows it. Either guard it with "
+                "'&& rc=0 || rc=$?', or -- if you are listing flags rather "
+                "than giving a runnable recipe -- move it into a table so it "
+                "cannot be pasted as a script.\n"
             )
             failures += 1
     return failures
@@ -145,7 +147,7 @@ def main():
                     print(f"      {line.strip()}")
                     print(f"      why: {why}\n")
                     failures += 1
-        failures += check_mixed_guarding(md, text)
+        failures += check_unguarded(md, text)
 
     if failures:
         print(f"{failures} bad recipe(s) in documented code blocks")

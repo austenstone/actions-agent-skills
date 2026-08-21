@@ -20,12 +20,14 @@ bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/d
 
 Prefer the bare form. It auto-discovers `.github/workflows/` and picks up **both** `.yml` and `.yaml`; an explicit `*.yml` glob silently skips `.yaml` workflows.
 
-```bash
-actionlint -format '{{json .}}'                           # all findings as one JSON array
-actionlint -shellcheck= -format '{{json .}}'              # same, minus shell linting
-actionlint -ignore 'regex matching messages to drop'
-actionlint -init-config                                   # write a starter actionlint.yaml
-```
+Flags, not a script — findings exit `1`, so wrap every one of these in the guarded form below before putting it in a `set -e` shell.
+
+| Arguments | Effect |
+|---|---|
+| `-format '{{json .}}'` | all findings as one JSON array |
+| `-shellcheck= -format '{{json .}}'` | same, minus shell linting |
+| `-ignore 'REGEX'` | drop messages matching a regex |
+| `-init-config` | write a starter `actionlint.yaml` |
 
 Exit codes: `0` clean · `1` findings · `2` invalid option · `3` fatal.
 
@@ -92,25 +94,27 @@ cargo install zizmor
 
 ### Run
 
-```bash
-zizmor --format json .github/workflows/           # local
-zizmor --format json .github/workflows/ci.yml     # single file
-GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO        # remote, NO CLONE
-GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO@v1.2.0 # pinned ref
-zizmor --format sarif .github/workflows/          # for code scanning upload
-zizmor --offline ...                              # local only — see recovery table below
-```
+Target and output forms. These are **arguments, not a script** — a findings run exits `11`–`14`, so every one of these needs the [guarded wrapper](#the-one-jq-recipe-worth-memorizing) around it before it goes in a `set -e` shell.
 
-Those are **invocation forms, not runnable procedures.** Do not paste them into a script bare: findings exit `11`–`14`, which aborts any `set -e` shell. The wrapper to actually run is [below](#the-one-jq-recipe-worth-memorizing).
+| Arguments | Target |
+|---|---|
+| `--format json .github/workflows/` | local directory |
+| `--format json .github/workflows/ci.yml` | single local file |
+| `--format json OWNER/REPO` | remote, **no clone** — needs `GH_TOKEN=$(gh auth token)` |
+| `--format json OWNER/REPO@v1.2.0` | remote at a pinned ref |
+| `--format sarif .github/workflows/` | local, for code-scanning upload |
+| `--offline` | **local only** — invalid against a remote slug, see the recovery table below |
 
 **Remote mode is the differentiator.** You can audit any repository you can read without cloning it — useful for reviewing a repo you don't have checked out, or auditing a dependency.
 
 Noise control:
 
-```bash
-zizmor --min-severity medium --min-confidence medium ...
-zizmor --persona regular      # default; auditor = maximum paranoia, pedantic = style too
-```
+| Arguments | Effect |
+|---|---|
+| `--min-severity medium --min-confidence medium` | drop everything below the floor |
+| `--persona regular` | default |
+| `--persona auditor` | maximum paranoia |
+| `--persona pedantic` | adds style findings |
 
 There is no `--only` flag in v1.29.0. Use severity/confidence filters, inline ignores, or config ignores for noise control.
 
@@ -212,10 +216,10 @@ Severity ∈ `Informational|Low|Medium|High`. Confidence ∈ `Low|Medium|High`.
 - `safe` — semantics preserved. Candidate for auto-apply.
 - `unsafe` — may change behavior (e.g. `persist-credentials: false` breaks any later step that pushes). **Propose only.**
 
-```bash
-zizmor --fix=safe .github/workflows/       # EXPERIMENTAL — explicit user request only
-zizmor --fix=all  .github/workflows/       # includes unsafe. Show the diff first.
-```
+| Arguments | Applies |
+|---|---|
+| `--fix=safe .github/workflows/` | `safe` dispositions only — **experimental**, explicit user request only |
+| `--fix=all .github/workflows/` | includes `unsafe`. Show the diff first. |
 
 Always `git diff` after, and re-run `actionlint` — a security fix that breaks syntax is a regression.
 
