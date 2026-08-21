@@ -20,7 +20,10 @@ NOISE='^(url)$'
 IDENT_PATTERN='`[a-z][a-z0-9-]{3,}`'
 
 # Structural anchors on the docs page, plus per-audit "-configuration" subsections.
-NOT_AN_AUDIT='^(after|before|configuration|audit-rules|remediation|misfeature|github-app|rules[a-z-]*|.*-configuration)$'
+# Do NOT add real audit ids here to make the check pass. `misfeature` and
+# `github-app` were once excluded as "structural"; both are real audits and real
+# scans emit them as idents, so excluding them silently hid two missing rows.
+NOT_AN_AUDIT='^(after|before|configuration|audit-rules|remediation|rules[a-z-]*|.*-configuration)$'
 
 live="$(mktemp)"
 claimed="$(mktemp)"

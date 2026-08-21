@@ -29,6 +29,27 @@ Start with data, not grep. Static YAML review tells you possible waste; metrics 
 
 Toolkit mechanics and caveats live in [`../actions-workflow-toolkit/SKILL.md#get-real-performance-data`](../actions-workflow-toolkit/SKILL.md#step-3--get-real-performance-data). Do not use deprecated run timing data or public-repo `billable.total_ms` for cost math. Use `/jobs` durations rolled up by runner SKU plus the live rate card for cost, and wall-clock critical path for latency.
 
+### Public-repo fallback when dashboards are unavailable
+
+If Actions Performance Metrics or Usage Metrics are unavailable, do not stall. Use a small public run sample:
+
+```bash
+gh run list --repo OWNER/REPO --limit 100 --json databaseId,name,conclusion,event,createdAt,updatedAt,headBranch
+gh api repos/OWNER/REPO/actions/runs/RUN_ID/jobs
+```
+
+Label this **sampled public telemetry, not billing or usage truth**. It is biased by run retention, the chosen sample size, branch/event mix, and whatever happened to run recently.
+
+Use it only for observed patterns:
+
+- Observed workflows, events, conclusions, branches, and cadence inside the sampled window.
+- Per-job duration from `/jobs` `started_at` and `completed_at`; this is the reliable duration source.
+- Step timings for bottleneck diagnosis when present.
+
+Keep the cost math strict. GitHub rounds each job's partial minutes up to the nearest whole minute, so estimate per-run cost as the sum of rounded per-job minutes grouped by runner label/SKU, then apply the live rate card from [`docs-map.md#performance-and-cost`](../actions-workflow-toolkit/references/docs-map.md#performance-and-cost). Workflow wall-clock is latency, not cost. If any jobs are missing from the API response, do not estimate cost from the partial job list.
+
+Do not convert this sample into customer run frequency, billable usage, or savings. Say "observed in the last 100 listed runs" and leave annualized/monthly savings unquantified unless Usage Metrics, workflow history coverage, or the repo owner supplies frequency.
+
 ## Phase 2: Diagnose
 
 Use this order. It prevents the classic mistake: optimizing YAML while jobs are just waiting for capacity.

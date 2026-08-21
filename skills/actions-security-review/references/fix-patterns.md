@@ -237,6 +237,21 @@ jobs:
       deploy_token: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
 ```
 
+## GitHub App installation tokens
+
+Cite `github-app` when zizmor flags it and cite the finding URL. The risk is not "GitHub Apps are bad"; the risk is issuing an installation token with too much lifetime, repository reach, or permission reach for the job.
+
+Fix direction:
+
+- Keep token revocation enabled unless the workflow has a specific post-job need.
+- Scope the token to the exact repositories the job touches.
+- Request only the permissions needed for the operation.
+- Prefer `GITHUB_TOKEN` when its scoped job permissions are enough.
+
+## Misfeatures
+
+Cite `misfeature` when zizmor flags it and cite the finding URL. Treat it as hardening unless it combines with a privileged path. Replace the feature with the remediation suggested by the audit docs, such as moving package installation out of setup-action inputs and into an explicit, auditable install step.
+
 ## OIDC trust policy mistakes
 
 Use OIDC instead of long-lived cloud keys, then review the cloud trust policy. Wildcard `sub` matching turns a good design into broad repo or org trust. Cite GitHub's [OIDC reference](https://docs.github.com/en/actions/reference/security/oidc).

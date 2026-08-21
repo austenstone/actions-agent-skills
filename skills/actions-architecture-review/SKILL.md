@@ -27,6 +27,21 @@ Start with the estate boundary:
 
 Use concrete commands from [`references/inventory-and-classification.md`](references/inventory-and-classification.md). For every workflow file you inspect directly, run the toolkit validation first. Architecture findings should sit on top of valid YAML, not compensate for broken YAML.
 
+### Scanner-flood handoff
+
+On large estates, a scanner flood can be architecture evidence. If `actionlint`, `zizmor`, or another correctness/security scanner repeats the same rule across many workflows, diagnose the platform shape instead of filing hundreds of YAML chores.
+
+Recognize the pattern from scanner output:
+
+- Same `ident` or rule name dominates the results.
+- High count across many files, not one broken workflow.
+- Findings cluster in near-duplicate workflow families or reusable-workflow callers.
+- The fix would require broad coordinated edits, for example `unpinned-uses` or `secrets-inherit` repeated across dozens of workflows.
+
+Treat that as a governance/refactor problem: central reusable workflows, org-level workflow policy, allowed-actions or pinning policy, Dependabot/Renovate automation for action refs, starter workflows, and CODEOWNERS/rulesets for `.github/workflows/**`.
+
+Keep this conditional. A small repo with a handful of workflows and no duplication does not need a platform program because a scanner found a few items. Fix those locally or say the architecture is fine.
+
 ## Phase 2: Classify
 
 Classify the dominant failure shape. Mixed estates exist, but force a primary diagnosis.

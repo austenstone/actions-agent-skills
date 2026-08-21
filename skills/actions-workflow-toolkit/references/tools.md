@@ -18,15 +18,29 @@ bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/d
 
 ### Run
 
+Prefer the bare form. It auto-discovers `.github/workflows/` and picks up **both** `.yml` and `.yaml`; an explicit `*.yml` glob silently skips `.yaml` workflows.
+
 ```bash
-actionlint -format '{{json .}}' .github/workflows/*.yml   # all findings as one JSON array
-actionlint                                                # auto-discovers .github/workflows/
-actionlint -shellcheck=                                   # disable shellcheck
+actionlint -format '{{json .}}'                           # all findings as one JSON array
+actionlint -shellcheck= -format '{{json .}}'              # same, minus shell linting
 actionlint -ignore 'regex matching messages to drop'
 actionlint -init-config                                   # write a starter actionlint.yaml
 ```
 
 Exit codes: `0` clean · `1` findings · `2` invalid option · `3` fatal.
+
+**Always run it under a timeout, and fall back on hang.** actionlint shells out to `shellcheck` once per `run:` block. On large workflow sets this can stall for minutes with no output — measured to exceed 120s on 7 of 10 real public repos (`cli/cli`, `vercel/next.js`, `home-assistant/core`, `rust-lang/rust`, `denoland/deno`, `pytorch/pytorch`, `pandas-dev/pandas`). A hang is indistinguishable from work in progress, so an agent that does not bound it either blocks forever or quietly skips correctness review.
+
+```bash
+timeout 120 actionlint -format '{{json .}}' > actionlint.json || {
+  echo 'actionlint timed out or failed; retrying without shellcheck' >&2
+  actionlint -shellcheck= -format '{{json .}}' > actionlint.json
+}
+```
+
+`timeout` is GNU coreutils; on macOS use `gtimeout` from `brew install coreutils`.
+
+If you fall back, **say so in the report**: shell linting inside `run:` blocks was skipped. The fallback returns instantly on every repo measured, and still catches all YAML, expression, and workflow-syntax errors.
 
 ### Output shape
 
@@ -44,7 +58,7 @@ Exit codes: `0` clean · `1` findings · `2` invalid option · `3` fatal.
 
 Useful `kind` values: `syntax-check`, `expression`, `shellcheck`, `matrix`, `events`, `job-needs`, `action`, `workflow-call`, `glob`, `runner-label`, `credentials`.
 
-**Treat every finding as a real bug.** actionlint is conservatively tuned and has a very low false-positive rate. If it says an expression is wrong, it is wrong.
+**Split `shellcheck` findings from the rest.** Everything actionlint reports outside `kind: shellcheck` is a correctness finding: it is conservatively tuned, and if it says an expression is wrong, it is wrong. `kind: shellcheck` is a different class — it carries ShellCheck's own style warnings. Measured: 5 of `sveltejs/svelte`'s 7 findings were `SC2006` backtick-style warnings, which do not belong next to an undefined-expression bug in a report. Triage those by ShellCheck severity and treat most as hygiene.
 
 ### What it uniquely catches
 
@@ -127,10 +141,27 @@ Exit codes: `0` clean · `1` audit error · `2` argument error · `3` no inputs 
 
 ### The one jq recipe worth memorizing
 
+**Never pipe `zizmor` straight into `jq`, and never send its stderr to `/dev/null`.** When an online audit cannot resolve a referenced repo, zizmor aborts the *entire* run: it prints `fatal: no audit was performed` to stderr and writes **nothing** to stdout. `jq` on empty input exits `0` and prints nothing, so a crashed scan is indistinguishable from a clean one. An agent following the naive pipe will hand the customer a false clean bill of health. Measured on `vercel/next.js` (local and remote) and `pandas-dev/pandas` (remote).
+
+Capture both streams, then assert you actually got JSON:
+
 ```bash
-zizmor --format json .github/workflows/ 2>/dev/null | jq -r \
-  '.[] | "\(.determinations.severity)\t\(.determinations.confidence)\t\(.ident)\t\(.locations[0].concrete.location.start_point.row + 1)"'
+if ! zizmor --format json .github/workflows/ >zizmor.json 2>zizmor.err; then
+  if grep -qE 'fatal: no audit was performed|no inputs collected|couldn.t list (tags|branches)' zizmor.err; then
+    cat zizmor.err >&2
+    echo 'zizmor hard-failed. Retry with --no-online-audits, then --offline.' >&2
+    exit 2
+  fi
+fi
+
+jq -e 'type == "array"' zizmor.json >/dev/null   # fail loudly on empty or non-JSON
+
+jq -r '.[] | "\(.determinations.severity)\t\(.determinations.confidence)\t\(.ident)\t\(.locations[0].concrete.location.start_point.row + 1)"' zizmor.json
 ```
+
+A findings-producing run exits non-zero by design (`11`–`14` by severity), which is why the `if !` guard inspects stderr instead of trusting the exit code alone. Do not infer clean-vs-failed from the exit code: require valid JSON.
+
+On hard failure, retry `--no-online-audits`, then `--offline`. Both recovered the `vercel/next.js` scan immediately. Report that network-dependent audits (`impostor-commit`, `ref-confusion`, `known-vulnerable-actions`, `stale-action-refs`) were skipped.
 
 ```
 High	High	template-injection	11
@@ -141,7 +172,9 @@ Medium	Medium	excessive-permissions	7
 Medium	Low	artipacked	10
 ```
 
-Severity ∈ `Informational|Low|Medium|High`. Confidence ∈ `Low|Medium|High`. Rank by severity, then confidence. **Anything `High`/`High` is not a judgment call — fix it.**
+Severity ∈ `Informational|Low|Medium|High`. Confidence ∈ `Low|Medium|High`.
+
+**Sort by severity and confidence, but do not present in that order.** Severity is the scanner's confidence that a pattern matched, not the customer's business priority. `actions/checkout` — a well-maintained first-party repo — yields 27 `High`/`High` findings, nearly all first-party tag pins and `:latest` test containers. Leading with those buries the one finding that matters. `actions-security-review` owns the ranking and false-positive discipline; apply it before showing a human anything.
 
 ### Fixes
 
@@ -168,11 +201,11 @@ Grouped for orientation only — the authoritative list and descriptions are at
 |---|---|
 | Injection | `template-injection`, `github-env`, `insecure-commands` |
 | Trigger & condition soundness | `dangerous-triggers`, `bot-conditions`, `unsound-condition`, `unsound-contains`, `unsound-ternary` |
-| Permissions & secrets | `excessive-permissions`, `undocumented-permissions`, `secrets-inherit`, `overprovisioned-secrets`, `secrets-outside-env`, `unredacted-secrets` |
+| Permissions & secrets | `excessive-permissions`, `undocumented-permissions`, `secrets-inherit`, `overprovisioned-secrets`, `secrets-outside-env`, `unredacted-secrets`, `github-app` |
 | Supply chain | `unpinned-uses`, `unpinned-images`, `unpinned-tools`, `known-vulnerable-actions`, `impostor-commit`, `typosquat-uses`, `forbidden-uses`, `stale-action-refs`, `archived-uses`, `ref-confusion`, `ref-version-mismatch`, `adhoc-packages` |
 | Credentials | `artipacked`, `hardcoded-container-credentials`, `use-trusted-publishing` |
 | Cache & capacity | `cache-poisoning`, `concurrency-limits` |
-| Hygiene & config | `self-hosted-runner`, `self-repository`, `obfuscation`, `anonymous-definition`, `insecure-url-scheme`, `superfluous-actions`, `dependabot-cooldown`, `dependabot-execution` |
+| Hygiene & config | `self-hosted-runner`, `self-repository`, `obfuscation`, `misfeature`, `anonymous-definition`, `insecure-url-scheme`, `superfluous-actions`, `dependabot-cooldown`, `dependabot-execution` |
 
 Several require network access (`known-vulnerable-actions`, `impostor-commit`, `typosquat-uses`, `archived-uses`, `stale-action-refs`, `ref-confusion`). Use `--no-online-audits` to skip only those, or `--offline` to forbid all network use.
 

@@ -45,25 +45,33 @@ Two tools, different planes, both worth running:
 | Auto-fix | no | yes, with pre-resolved SHAs |
 
 ```bash
-# correctness — local only
-actionlint -format '{{json .}}' .github/workflows/*.yml
+# correctness — local only. Bare form auto-discovers .github/workflows/ and
+# covers .yml AND .yaml. Bound it: shellcheck can hang on large workflow sets.
+timeout 120 actionlint -format '{{json .}}' > actionlint.json ||
+  actionlint -shellcheck= -format '{{json .}}' > actionlint.json
 
-# security — local
-zizmor --format json .github/workflows/
+# security — local. Never pipe straight to jq; a hard-failed run writes
+# nothing to stdout and reads as "clean". Capture, then assert.
+zizmor --format json .github/workflows/ >zizmor.json 2>zizmor.err
+jq -e 'type == "array"' zizmor.json >/dev/null || cat zizmor.err >&2
 
-# security — remote, no clone
+# security — remote, no clone. NOT the same file set as the local scan.
 GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO
 ```
+
+Full wrappers, hard-fail recovery, and the timeout rationale: [`references/tools.md`](references/tools.md).
+
+Remote mode is a **separate repo-context pass**, not a second opinion on the same files. It walks the whole repository, so it picks up nested workflow directories and composite actions the local scan never saw — `rust-lang/rust` returns 5 findings locally and 361 remotely. Never diff the two counts as if they scanned the same thing.
 
 Neither tool installed and you cannot install one? Say so explicitly in the report, then fall back to the playbook's grep heuristics — labelled as heuristics.
 
 ### Reading the output
 
-`actionlint` → array of `{message, filepath, line, column, end_column, kind, snippet}`. **Every entry is a real bug.** It is conservatively tuned; treat findings as facts, not candidates.
+`actionlint` → array of `{message, filepath, line, column, end_column, kind, snippet}`. Everything outside `kind: shellcheck` is a correctness finding: the tool is conservatively tuned, so treat those as facts, not candidates. `kind: shellcheck` is ShellCheck's own output and includes style warnings (`SC2006` backticks and friends) — triage it separately and report it as hygiene, not as a broken workflow.
 
 `zizmor` → array of `{ident, desc, determinations:{severity, confidence, persona}, locations[], fixes[], ignored, url}`.
 
-- Rank by `determinations.severity`, then `confidence`.
+- Sort by `determinations.severity`, then `confidence` — but do not *present* in that order. Severity is scanner confidence, not business priority; `actions/checkout` alone yields 27 `High`/`High` findings that are mostly first-party tag pins. `actions-security-review` owns ranking.
 - `url` is the rule's own documentation — cite it, don't paraphrase it.
 - `fixes[]` may contain a **pre-resolved SHA** (`"pin OWNER/ACTION@TAG to <resolved SHA>"`). Use it directly; never look one up yourself and never invent one.
 - Each fix carries `disposition: "safe" | "unsafe"`. Only `safe` fixes are candidates for automatic application — and even then, see the safety contract.

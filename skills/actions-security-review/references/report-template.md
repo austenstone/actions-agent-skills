@@ -19,9 +19,17 @@ Not checked: org allowed-actions policy and cloud OIDC trust policy were not ava
 Rules:
 
 - Lead with consequence, not rule ID.
+- Rank by exploitability and blast radius, not raw scanner severity.
 - Keep scanner internals out of Layer 1.
 - Include clean checks. Silence is ambiguous.
 - Include skipped checks. Hidden gaps are worse than known gaps.
+- First-party action tag pins, low-confidence cache-poisoning, and `artipacked` hygiene belong in grouped hardening unless they combine with an exploit path.
+
+If online zizmor audits hard-failed and the successful rerun used `--no-online-audits` or `--offline`, say so:
+
+```md
+Skipped checks: zizmor network-dependent audits were skipped after the online pass hard-failed, so this review does not cover impostor commits, ref confusion, known-vulnerable actions, or stale action refs.
+```
 
 ## Layer 2 — remediation evidence
 
@@ -66,4 +74,29 @@ A clean workflow must produce a clean report:
 No security findings from zizmor. No actionlint findings. Manual review did not find privileged-trigger data-flow issues, public self-hosted runner exposure, `secrets: inherit`, or OIDC wildcard trust patterns in the files available.
 
 Not checked: org allowed-actions policy, repo rulesets, CODEOWNERS enforcement, and cloud-side OIDC trust policy were not available from the workflow checkout.
+```
+
+## Scale mode shape
+
+Use this when the repo has more than 25 workflows or more than 100 total findings:
+
+```md
+## Security review summary
+
+Scale mode: 151 workflows and 885 scanner findings. Raw findings are grouped below; the appendix has the scanner rows.
+
+### Fix first
+
+1. `release-*` workflows: privileged publish jobs consume PR-controlled artifacts. Redesign the trigger/data flow.
+2. `deploy-*` workflows: user-controlled release text reaches `run:`. Move expressions into `env:` and quote shell variables.
+
+### Cohorts
+
+- Third-party action pinning: 42 findings across 9 owners. Start with untrusted or abandoned owners used in release/deploy paths.
+- First-party `actions/*` tag pins: grouped hardening item. Not a top finding without an exploit path.
+- Reusable workflow secret inheritance: repeated across platform workflows. Treat as governance work on the reusable workflow contract.
+
+### Appendix
+
+Raw scanner rows omitted from the meeting summary; include them here or link the artifact.
 ```
