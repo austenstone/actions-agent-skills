@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  ACTIONLINT_VERSION: 1.7.12
+  ZIZMOR_VERSION: 1.29.0
+
+jobs:
+  # The fixtures must keep producing exactly the findings test-corpus/README.md
+  # documents. Drift here means a tool changed behavior and the skills' guidance
+  # may now be wrong.
+  corpus:
+    name: Test corpus
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL \
+            "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash" \
+            -o /tmp/download-actionlint.bash
+          bash /tmp/download-actionlint.bash "${ACTIONLINT_VERSION}" "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install zizmor
+        run: pipx install "zizmor==${ZIZMOR_VERSION}"
+
+      # Network audits (known-vulnerable-actions, impostor-commit) are part of
+      # what the corpus asserts, so a token is required for a faithful run.
+      - name: Verify fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./test-corpus/verify.sh
+
+  # A reference-first skill set is only as good as its references.
+  references:
+    name: References
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Relative links and anchors resolve
+        run: python3 scripts/check-links.py
+
+      - name: Cited URLs resolve
+        run: ./scripts/check-urls.sh
+
+      - name: No invented or stale zizmor rule names
+        run: ./scripts/check-audit-idents.sh
+
+  # Dogfood. A workflow-security skill whose own CI fails its own review is not
+  # worth reading.
+  self-review:
+    name: Self review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL \
+            "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash" \
+            -o /tmp/download-actionlint.bash
+          bash /tmp/download-actionlint.bash "${ACTIONLINT_VERSION}" "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install zizmor
+        run: pipx install "zizmor==${ZIZMOR_VERSION}"
+
+      - name: actionlint
+        run: actionlint -color
+
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor .github/workflows/
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh test-corpus/verify.sh

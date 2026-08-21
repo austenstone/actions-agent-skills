@@ -1,0 +1,46 @@
+# The false-positive control. A well-written workflow.
+# MUST produce zero zizmor findings and zero actionlint errors.
+# If a skill flags anything here, that skill is too noisy and gets ignored.
+name: clean-fixture
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Least privilege at the top; jobs opt in to more.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Untrusted input passed via env, never interpolated into the script.
+      - name: Report title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "Testing $PR_TITLE"
+
+      - name: Test
+        run: npm test

@@ -1,0 +1,39 @@
+# Deliberately insecure — validation fixture for actions-security-review.
+# NOT a real workflow. Lives outside .github/workflows/ so it never runs.
+# Expected to trigger: dangerous-triggers, template-injection, unpinned-uses,
+# known-vulnerable-actions, excessive-permissions, artipacked, github-env,
+# self-hosted-runner, secrets-inherit.
+name: insecure-fixture
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+permissions: write-all
+
+jobs:
+  pwn-request:
+    runs-on: ubuntu-latest
+    steps:
+      # unpinned + checks out untrusted PR head under a privileged trigger
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # template injection: PR title pasted straight into the shell
+      - run: echo "Building ${{ github.event.pull_request.title }}"
+
+      # known-vulnerable action (CVE-2025-30066)
+      - uses: tj-actions/changed-files@v35
+
+      # GITHUB_ENV injection from untrusted input
+      - run: echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+
+  self-hosted-exposure:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+  leaky-caller:
+    uses: actions/starter-workflows/.github/workflows/deploy.yml@main
+    secrets: inherit
