@@ -35,13 +35,22 @@ Exit codes: `0` clean · `1` findings · `2` invalid option · `3` fatal.
 TIMEOUT=$(command -v timeout || command -v gtimeout || true)
 [ -n "$TIMEOUT" ] || echo 'no timeout binary (brew install coreutils) — running unbounded' >&2
 
-${TIMEOUT:+$TIMEOUT 120} actionlint -format '{{json .}}' > actionlint.json || {
-  echo 'actionlint timed out or failed; retrying without shellcheck' >&2
-  actionlint -shellcheck= -format '{{json .}}' > actionlint.json
-}
+${TIMEOUT:+$TIMEOUT 120} actionlint -format '{{json .}}' >actionlint.json 2>actionlint.err && rc=0 || rc=$?
+if [ "$rc" -ge 124 ]; then          # 124 = timed out, 137 = killed
+  echo 'actionlint timed out — retrying without shellcheck; shell linting SKIPPED' >&2
+  actionlint -shellcheck= -format '{{json .}}' >actionlint.json 2>actionlint.err && rc=0 || rc=$?
+fi
+[ "$rc" -le 1 ] || { cat actionlint.err >&2; exit 2; }   # 0 = clean, 1 = findings
+jq -e 'type == "array"' actionlint.json >/dev/null
 ```
 
-`timeout` ships with GNU coreutils and is **absent from stock macOS**. Resolve it into a variable first, as above. A bare `timeout 120 actionlint ... || actionlint -shellcheck= ...` is a trap: without coreutils the shell returns `127` instantly, the fallback fires on *every* run, and shell linting is silently skipped forever while the command still appears to succeed.
+Three traps in that wrapper, all of which silently delete findings rather than erroring:
+
+- **Never use a bare `||` to trigger the fallback.** `actionlint` exits `1` when it *finds* something, which is a successful run. `timeout 120 actionlint ... || actionlint -shellcheck= ...` therefore fires the fallback on every repo that has findings and finishes in time, overwriting the shellcheck-enabled results with shellcheck-disabled ones. Measured on this repo's `test-corpus/`: **10 findings including 2 `shellcheck` became 8 findings with 0 `shellcheck`**, no error printed. Branch on the exit code instead: `>= 124` is a timeout, `0` and `1` are both success, anything else is a real failure.
+- **Capture the status on the fallback invocation too, not just the first one.** Under `set -euo pipefail` a bare fallback aborts the script the instant it finds anything, so the `jq` validity assertion never runs and the caller sees a non-zero exit that looks like a crash. Verified against the corpus: with the fallback unguarded, execution never reached the assertion.
+- **`timeout` ships with GNU coreutils and is absent from stock macOS.** Resolve it into a variable first. Left bare, the shell returns `127` instantly on those machines, which the naive `||` also treats as "timed out" — so shell linting is skipped forever while the command still appears to succeed.
+
+The `&& rc=0 || rc=$?` form is deliberate: it captures the status without tripping `set -e`.
 
 If you fall back, **say so in the report**: shell linting inside `run:` blocks was skipped. The fallback returns instantly on every repo measured, and still catches all YAML, expression, and workflow-syntax errors.
 
@@ -152,7 +161,9 @@ Capture both streams, then assert you actually got JSON:
 if ! zizmor --format json .github/workflows/ >zizmor.json 2>zizmor.err; then
   if grep -qE 'fatal: no audit was performed|no inputs collected|couldn.t list (tags|branches)' zizmor.err; then
     cat zizmor.err >&2
-    echo 'zizmor hard-failed. Retry with --no-online-audits, then --offline.' >&2
+    echo 'zizmor hard-failed. Local: retry --no-online-audits, then --offline.' >&2
+    echo 'Remote: retry --no-online-audits only; --offline cannot fetch a slug.' >&2
+    echo 'If it says "no inputs collected", clone the repo and scan locally.' >&2
     exit 2
   fi
 fi
@@ -164,7 +175,18 @@ jq -r '.[] | "\(.determinations.severity)\t\(.determinations.confidence)\t\(.ide
 
 A findings-producing run exits non-zero by design (`11`–`14` by severity), which is why the `if !` guard inspects stderr instead of trusting the exit code alone. Do not infer clean-vs-failed from the exit code: require valid JSON.
 
-On hard failure, retry `--no-online-audits`, then `--offline`. Both recovered the `vercel/next.js` scan immediately. Report that network-dependent audits (`impostor-commit`, `ref-confusion`, `known-vulnerable-actions`, `stale-action-refs`) were skipped.
+On hard failure, the correct recovery depends on **which failure** and **which mode**:
+
+| Failure | Local `.github/workflows/` | Remote `OWNER/REPO` |
+|---|---|---|
+| `couldn't list tags/branches` for an inaccessible action | `--no-online-audits`, then `--offline` | `--no-online-audits` only |
+| `no inputs collected` | check the path — nothing auditable was found | **clone the repo and scan locally**; flags do not help |
+
+**`--offline` is invalid in remote mode.** zizmor must fetch the repository before it can audit it, so `--offline OWNER/REPO` always hard-fails with `can't fetch remote repository` and upstream's own help says to remove the flag. Only `--no-online-audits` recovers a remote scan.
+
+Measured: `vercel/next.js` hard-failed on an inaccessible `vercel/gh-sts-action`, and `--no-online-audits` recovered it in both modes (159 findings local, 161 remote). `pandas-dev/pandas` remote returned `collected 0 inputs` — neither flag recovered it, but a local scan of the cloned checkout returned 21 findings normally. When remote collection yields nothing, clone and rerun locally rather than reporting the repo clean.
+
+Report that network-dependent audits (`impostor-commit`, `ref-confusion`, `known-vulnerable-actions`, `stale-action-refs`) were skipped whenever you fall back.
 
 ```
 High	High	template-injection	11

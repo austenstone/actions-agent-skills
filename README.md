@@ -85,16 +85,20 @@ Full contract: [`actions-workflow-toolkit/SKILL.md`](skills/actions-workflow-too
 
 ```bash
 ./test-corpus/verify.sh              # fixtures still produce the documented findings
+./scripts/check-wrapper-runs.sh      # the documented wrapper, extracted and actually run
 ./scripts/check-urls.sh              # every cited URL resolves
 ./scripts/check-audit-idents.sh      # no invented or stale zizmor rule names
 ./scripts/check-action-refs.sh       # every cited action exists and is the current major
 python3 scripts/check-links.py       # every relative link and anchor resolves
 python3 scripts/check-frontmatter.py # skill frontmatter parses and has triggers
+python3 scripts/check-recipes.py     # documented commands cannot silently drop findings
 ```
 
-All six run in CI. The repo also runs `actionlint` and `zizmor` on its own workflows — a security skill whose own CI fails its own review is not worth reading.
+All eight run in CI. The repo also runs `actionlint` and `zizmor` on its own workflows — a security skill whose own CI fails its own review is not worth reading.
 
 Each guard exists because that exact defect already shipped here. Rule names were invented, frontmatter was written that silently failed to parse, and the four skills independently drifted to four different major versions of `actions/checkout`. Prose review caught none of them. Anything a reviewer cannot reliably verify by reading gets a script instead.
+
+The last two guards are the sharpest example. Running the documented commands against ten real repositories surfaced recipes that dropped findings **without ever reporting an error**: a `zizmor` crash rendered byte-identical to a clean scan, an `actionlint` wrapper threw away its own shellcheck results because findings exit `1`, and `--offline` was recommended as remote-scan recovery when it cannot fetch a remote repository at all. So `check-recipes.py` greps for those shapes, and `check-wrapper-runs.sh` goes further: it extracts the wrapper straight out of `SKILL.md` and executes it under `set -euo pipefail` against the corpus, asserting it exits clean and keeps its shellcheck findings. Reading a wrapper does not reveal that it aborts before its own validity check. Running it does.
 
 ## License
 

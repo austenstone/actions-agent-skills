@@ -51,21 +51,28 @@ Two tools, different planes, both worth running:
 TIMEOUT=$(command -v timeout || command -v gtimeout || true)
 [ -n "$TIMEOUT" ] || echo 'no timeout binary (brew install coreutils) — running unbounded' >&2
 
-${TIMEOUT:+$TIMEOUT 120} actionlint -format '{{json .}}' > actionlint.json || {
+${TIMEOUT:+$TIMEOUT 120} actionlint -format '{{json .}}' >actionlint.json 2>actionlint.err && rc=0 || rc=$?
+if [ "$rc" -ge 124 ]; then          # 124 = timed out, 137 = killed
   echo 'actionlint timed out — retrying without shellcheck; shell linting SKIPPED' >&2
-  actionlint -shellcheck= -format '{{json .}}' > actionlint.json
-}
+  actionlint -shellcheck= -format '{{json .}}' >actionlint.json 2>actionlint.err && rc=0 || rc=$?
+fi
+[ "$rc" -le 1 ] || { cat actionlint.err >&2; exit 2; }   # 0 = clean, 1 = findings
+jq -e 'type == "array"' actionlint.json >/dev/null
 
 # security — local. Never pipe straight to jq; a hard-failed run writes
 # nothing to stdout and reads as "clean". Capture, then assert.
-zizmor --format json .github/workflows/ >zizmor.json 2>zizmor.err
-jq -e 'type == "array"' zizmor.json >/dev/null || cat zizmor.err >&2
+zizmor --format json .github/workflows/ >zizmor.json 2>zizmor.err && rc=0 || rc=$?
+case "$rc" in 0|1[1-4]) ;; *) cat zizmor.err >&2; exit 2 ;; esac   # 11–14 = findings
+jq -e 'type == "array"' zizmor.json >/dev/null
 
 # security — remote, no clone. NOT the same file set as the local scan.
 GH_TOKEN=$(gh auth token) zizmor --format json OWNER/REPO
 ```
 
-Do **not** write a bare `timeout 120 actionlint ... || actionlint -shellcheck= ...`. On any machine without coreutils, `timeout` exits 127 immediately, the fallback fires on every run, and shell linting is silently dropped forever with no visible error.
+**Both tools exit non-zero when they find something, and that is a *successful* run.** `actionlint` exits `1`; `zizmor` exits `11`–`14` by severity. Two consequences, both of which silently destroy results rather than erroring:
+
+- **Never trigger the fallback with a bare `||`.** `timeout 120 actionlint ... || actionlint -shellcheck= ...` fires on every repo that *has findings* and finishes in time, overwriting the shellcheck-enabled results with shellcheck-disabled ones. Measured on this repo's own `test-corpus/`: 10 findings including 2 `shellcheck` became 8 findings with 0 `shellcheck`, no error shown.
+- **Capture the status with `&& rc=0 || rc=$?` on every invocation, including the fallback.** Pasted into a `set -euo pipefail` script — which is what a careful agent writes — a bare invocation aborts the script the moment either tool finds anything, *before* the `jq` validity assertion ever runs. Verified: the fallback path and the bare `zizmor` line both exited without reaching their assertion.
 
 Full wrappers, hard-fail recovery, and the timeout rationale: [`references/tools.md`](references/tools.md).
 

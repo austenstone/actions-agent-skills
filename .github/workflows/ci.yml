@@ -54,6 +54,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./test-corpus/verify.sh
 
+      # Extract the wrapper the skills tell agents to run, and run it. Reading
+      # it is not enough: both tools exit non-zero on findings, so a wrapper
+      # that reads fine can still abort or silently drop results when executed.
+      - name: Documented wrapper executes correctly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/check-wrapper-runs.sh
+
   # A reference-first skill set is only as good as its references.
   references:
     name: References
@@ -84,6 +92,9 @@ jobs:
         run: ./scripts/check-action-refs.sh
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Documented shell recipes cannot silently drop findings
+        run: python3 scripts/check-recipes.py
 
   # Dogfood. A workflow-security skill whose own CI fails its own review is not
   # worth reading.
