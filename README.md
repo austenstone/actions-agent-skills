@@ -1,105 +1,21 @@
-# Actions Agent Skills
+# Moved to `actions@austenstone`
 
-Agent skills that read GitHub Actions workflows and make them **safer, faster, and better-shaped** — backed by real linters instead of vibes.
+The canonical home for this project is now [`austenstone/.copilot/plugins/actions`](https://github.com/austenstone/.copilot/tree/main/plugins/actions).
 
-Drop-in for any agent that reads `SKILL.md` files: GitHub Copilot CLI, Claude Code, Cursor, or anything following the [Agent Skills](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills) convention.
-
-## Why this exists
-
-Most workflow-review guidance for agents is prose: "avoid template injection", "pin your actions". The agent then greps the YAML and reasons about it. That misses things, and worse, it produces confident findings nobody can verify.
-
-These skills do the opposite. They **run [`actionlint`](https://github.com/rhysd/actionlint) and [`zizmor`](https://docs.zizmor.sh/)**, parse the JSON, and rank what comes back. Every claim traces to a rule ident or a live documentation URL.
-
-The difference is measurable. From [`test-corpus/`](test-corpus/):
-
-| fixture | `actionlint` | `zizmor` |
-|---|---|---|
-| `broken.yml` — correctness bugs | **7 findings** | 0 relevant |
-| `insecure.yml` — security bugs | 3 | **14 findings, 8 rules** |
-| `clean.yml` — well-written | **0** | **0** |
-
-Neither tool subsumes the other, and neither is replaceable by reading the file. A cron hour of `25`, a typo'd `ubuntu-lastest` label, a `needs:` pointing at a job that doesn't exist, `tj-actions/changed-files@v35` carrying a known CVE — these are not things an LLM reliably spots by looking.
-
-## The other principle: link, don't freeze
-
-Every number in the GitHub docs is a number that will be wrong in six months. So these skills carry **procedure, decision logic, and a question → URL routing table** — not a copy of the docs.
-
-[`docs-map.md`](skills/actions-workflow-toolkit/references/docs-map.md) is the core of this: ~40 rows mapping "what am I trying to find out" to the canonical URL. The agent fetches live truth instead of trusting stale markdown.
-
-CI enforces it. Every external URL is checked on every push.
-
-## Skills
-
-```
-actions-workflow-toolkit          shared substrate — the other three load it
-├── actions-security-review       zizmor-driven; injection, triggers, pinning, permissions
-├── actions-optimization          measure first; queue vs run vs rerun, then the right lever
-└── actions-architecture-review   the shape problems no linter can see
-```
-
-| Skill | Use when |
-|---|---|
-| [`actions-workflow-toolkit`](skills/actions-workflow-toolkit/SKILL.md) | Always, alongside one of the others. Tool invocations, JSON shapes, performance-data ladder, safety contract. |
-| [`actions-security-review`](skills/actions-security-review/SKILL.md) | "Is this workflow safe?", "audit our Actions security", pinning, `pull_request_target`, secrets exposure. |
-| [`actions-optimization`](skills/actions-optimization/SKILL.md) | "CI is slow", "reduce our Actions bill", cache misses, runner sizing, matrix tuning. |
-| [`actions-architecture-review`](skills/actions-architecture-review/SKILL.md) | "Reusable workflow or composite action?", duplicated CI across repos, monorepo design, workflow governance. |
-
-`actions-architecture-review` is the one with no linter behind it — deliberately. Linters work per-file and cannot tell you that 23 repos copy-pasted the same deploy job.
-
-## Install
-
-The tools:
+Install it with [GitHub Copilot CLI plugins](https://docs.github.com/copilot/how-tos/copilot-cli/customize-copilot/plugins-finding-installing):
 
 ```bash
-brew install actionlint          # or: go install github.com/rhysd/actionlint/cmd/actionlint@latest
-brew install zizmor              # or: uv tool install zizmor / cargo install zizmor
+copilot plugin marketplace add austenstone/.copilot
+copilot plugin install actions@austenstone
 ```
 
-The skills — clone anywhere your agent reads skills from:
+The plugin is a self-contained [Agent Plugins 1.0](https://agent-plugins.org/) package containing:
 
-```bash
-git clone https://github.com/austenstone/actions-agent-skills
-cp -r actions-agent-skills/skills/* ~/.copilot/skills/
-```
+- `actions-workflow-toolkit`
+- `actions-optimization`
+- `actions-security-review`
+- `actions-architecture-review`
 
-`zizmor` wants `GH_TOKEN` for its network audits (known-CVE lookups, impostor-commit detection, remote repo auditing). Without it, use `--no-online-audits`.
+For non-Copilot or other compatible clients, consume the self-contained [`plugins/actions`](https://github.com/austenstone/.copilot/tree/main/plugins/actions) Agent Plugins 1.0 directory or the individual skill directories within it using that client's documented installation mechanism. Compatibility beyond the validated Copilot CLI flow is not claimed here.
 
-## Try it
-
-No clone required — `zizmor` audits any public repo by slug:
-
-```bash
-GH_TOKEN=$(gh auth token) zizmor --format json actions/checkout | jq -r \
-  '.[] | "\(.determinations.severity)\t\(.ident)\tline \(.locations[0].concrete.location.start_point.row + 1)"'
-```
-
-> `start_point.row` is **0-indexed**. Add 1 before showing a human a line number.
-
-## Safety
-
-The skills operate read-only by default. They will not commit, push, or apply fixes unless you explicitly ask. `zizmor --fix` is experimental and workflows are production infrastructure, so the default is to propose a diff and let you decide.
-
-Full contract: [`actions-workflow-toolkit/SKILL.md`](skills/actions-workflow-toolkit/SKILL.md#safety-contract).
-
-## Development
-
-```bash
-./test-corpus/verify.sh              # fixtures still produce the documented findings
-./scripts/check-wrapper-runs.sh      # the documented wrapper, extracted and actually run
-./scripts/check-urls.sh              # every cited URL resolves
-./scripts/check-audit-idents.sh      # no invented or stale zizmor rule names
-./scripts/check-action-refs.sh       # every cited action exists and is the current major
-python3 scripts/check-links.py       # every relative link and anchor resolves
-python3 scripts/check-frontmatter.py # skill frontmatter parses and has triggers
-python3 scripts/check-recipes.py     # documented commands cannot silently drop findings
-```
-
-All eight run in CI. The repo also runs `actionlint` and `zizmor` on its own workflows — a security skill whose own CI fails its own review is not worth reading.
-
-Each guard exists because that exact defect already shipped here. Rule names were invented, frontmatter was written that silently failed to parse, and the four skills independently drifted to four different major versions of `actions/checkout`. Prose review caught none of them. Anything a reviewer cannot reliably verify by reading gets a script instead.
-
-The last two guards are the sharpest example. Running the documented commands against ten real repositories surfaced recipes that dropped findings **without ever reporting an error**: a `zizmor` crash rendered byte-identical to a clean scan, an `actionlint` wrapper threw away its own shellcheck results because findings exit `1`, and `--offline` was recommended as remote-scan recovery when it cannot fetch a remote repository at all. So `check-recipes.py` greps for those shapes — plus a fourth: a bare invocation anywhere in a code block, which aborts the whole script under `set -euo pipefail` before any assertion runs. That fourth rule is absolute — every runnable example is guarded, and the flag catalogs live in tables precisely so they cannot be pasted as a script. And `check-wrapper-runs.sh` goes further: it extracts the wrapper straight out of `SKILL.md` and executes it under `set -euo pipefail` against the corpus, asserting it exits clean and keeps its shellcheck findings. Reading a wrapper does not reveal that it aborts before its own validity check. Running it does.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+This repository remains as a relocation notice and retains its MIT [LICENSE](LICENSE). Development continues only in the canonical plugin directory.
